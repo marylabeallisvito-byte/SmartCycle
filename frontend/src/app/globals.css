@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   SmartCycle — Premium Dark Theme (Bloomberg-terminal-esque)
+   ============================================================ */
+
+@layer base {
+  * {
+    @apply border-[#1e2948];
+  }
+
+  body {
+    @apply bg-[#06060c] text-[#e2e8f0] antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11", "ss01", "ss03";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::-webkit-scrollbar              { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track        { background: transparent; }
+  ::-webkit-scrollbar-thumb        { background: #1e2948; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover  { background: #263355; }
+
+  ::selection {
+    background: rgba(0, 212, 255, 0.25);
+    color: #e2e8f0;
+  }
+}
+
+@layer components {
+  .surface-card {
+    @apply rounded-xl border border-[#1e2948] bg-[#0f0f1e]/80 backdrop-blur-sm;
+  }
+  .surface-card-raised {
+    @apply rounded-xl border border-[#263355] bg-[#141428];
+  }
+  .glass-panel {
+    @apply rounded-xl border border-[#1e2948]/60 bg-[#0f0f1e]/50 backdrop-blur-md;
+  }
+  .neon-ring {
+    @apply ring-1 ring-[#00d4ff]/30;
+    box-shadow: 0 0 12px rgba(0, 212, 255, 0.3), 0 0 2px rgba(0, 212, 255, 0.15);
+  }
+  .status-dot {
+    @apply inline-block h-2 w-2 rounded-full;
+  }
+  .data-badge {
+    @apply inline-flex items-center gap-1 rounded-md bg-[#141428] px-2 py-0.5
+           font-mono text-xs text-[#94a3b8] border border-[#1e2948];
+  }
+}
+
+@layer utilities {
+  .text-glow-cyan  { text-shadow: 0 0 8px rgba(0, 212, 255, 0.4); }
+  .text-glow-green { text-shadow: 0 0 8px rgba(16, 185, 129, 0.4); }
+  .text-glow-gold  { text-shadow: 0 0 8px rgba(245, 158, 11, 0.4); }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+}
