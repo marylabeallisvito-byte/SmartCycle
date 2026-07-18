@@ -1,0 +1,62 @@
+# ============================================================
+# SmartCycle — .gitignore
+# ============================================================
+
+# --- Dependencies ---
+node_modules/
+.pnp
+.pnp.js
+
+# --- Build outputs ---
+.next/
+out/
+dist/
+build/
+*.egg-info/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.tsbuildinfo
+
+# --- Environment & Secrets ---
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# --- IDE ---
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# --- Python ---
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg
+
+# --- Docker ---
+docker-compose.override.yml
+
+# --- Logs ---
+*.log
+logs/
+
+# --- Testing & Coverage ---
+coverage/
+htmlcov/
+.coverage
+.hypothesis/
+
+# --- Misc ---
+*.tmp
+.cache/

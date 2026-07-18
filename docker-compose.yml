@@ -1,0 +1,150 @@
+# ============================================================
+# SmartCycle (金仕达·智循) — Docker Compose
+# Full-stack orchestration: Frontend + Backend + ChromaDB + Redis
+# ============================================================
+
+version: "3.9"
+
+services:
+  # ==========================================================
+  # Frontend — Next.js 15 (Turbopack dev server)
+  # ==========================================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    container_name: smartcycle-frontend
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    environment:
+      - NEXT_PUBLIC_API_URL=http://backend:8000
+      - NEXT_PUBLIC_WS_URL=ws://backend:8000
+      - NODE_ENV=development
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - smartcycle-net
+
+  # ==========================================================
+  # Backend — FastAPI + LangGraph Agent Orchestration
+  # ==========================================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    container_name: smartcycle-backend
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - ./backend:/app
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${DB_USER:-smartcycle}:${DB_PASS:-smartcycle}@postgres:5432/${DB_NAME:-smartcycle}
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8001
+      - REDIS_URL=redis://redis:6379/0
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      - LLM_MODEL=${LLM_MODEL:-gpt-4o}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-BAAI/bge-large-zh-v1.5}
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      - ENVIRONMENT=development
+      - LOG_LEVEL=DEBUG
+    depends_on:
+      postgres:
+        condition: service_healthy
+      chromadb:
+        condition: service_started
+      redis:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - smartcycle-net
+
+  # ==========================================================
+  # ChromaDB — Vector Store for RAG pipeline
+  # ==========================================================
+  chromadb:
+    image: chromadb/chroma:0.5.23
+    container_name: smartcycle-chromadb
+    ports:
+      - "${CHROMA_PORT:-8001}:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    environment:
+      - IS_PERSISTENT=TRUE
+      - ANONYMIZED_TELEMETRY=FALSE
+      - ALLOW_RESET=TRUE
+    restart: unless-stopped
+    networks:
+      - smartcycle-net
+
+  # ==========================================================
+  # PostgreSQL — Relational store for users & portfolios
+  # ==========================================================
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: smartcycle-postgres
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=${DB_USER:-smartcycle}
+      - POSTGRES_PASSWORD=${DB_PASS:-smartcycle}
+      - POSTGRES_DB=${DB_NAME:-smartcycle}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-smartcycle} -d ${DB_NAME:-smartcycle}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - smartcycle-net
+
+  # ==========================================================
+  # Redis — Message broker & session cache
+  # ==========================================================
+  redis:
+    image: redis:7.4-alpine
+    container_name: smartcycle-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    restart: unless-stopped
+    networks:
+      - smartcycle-net
+
+# ==========================================================
+# Named Volumes
+# ==========================================================
+volumes:
+  chroma_data:
+    driver: local
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+# ==========================================================
+# Network
+# ==========================================================
+networks:
+  smartcycle-net:
+    driver: bridge
+    name: smartcycle-net
