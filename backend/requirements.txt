@@ -1,43 +1,24 @@
 # ============================================================
-# SmartCycle — Core Backend Dependencies
-# Python 3.9+  |  Tornado + LangGraph + Pydantic
+# SmartCycle — Backend Dependencies
+# Python 3.9+
 #
-# For RAG / embeddings support, also install:
-#   chromadb>=0.5.0  sentence-transformers>=3.0.0
+# This is the MINIMAL dependency set. The project uses
+# graceful degradation — every external library has a
+# pure-stdlib or mock fallback when unavailable.
+#
+# To run with FULL capabilities, also install:
+#   akshare>=1.14.0       (real-time A-share data)
+#   chromadb>=0.5.0       (persistent vector store)
+#   sentence-transformers>=3.0.0  (real embeddings)
 # ============================================================
 
-# --- Web Framework & Server ---
+# --- Core Framework ---
 tornado>=6.5.0
-fastapi>=0.115.0
-uvicorn[standard]>=0.34.0
-python-multipart>=0.0.18
-
-# --- AI / LLM Orchestration ---
-langgraph>=0.2.0
-langgraph-checkpoint>=2.0.0
-langchain>=0.3.0
-langchain-openai>=0.2.0
-langchain-community>=0.3.0
-langchain-text-splitters>=0.3.0
-
-# --- Data Validation & Serialization ---
 pydantic>=2.10.0
-pydantic-settings>=2.7.0
-sqlalchemy>=2.0.0
-alembic>=1.14.0
-asyncpg>=0.30.0
-psycopg2-binary>=2.9.0
-
-# --- Async & HTTP ---
 httpx>=0.28.0
-redis>=5.0.0
 
-# --- Security ---
-python-jose[cryptography]>=3.3.0
-passlib[bcrypt]>=1.7.0
-python-dotenv>=1.0.0
-
-# --- Financial Data (lightweight) ---
+# --- Optional: real-time market data ---
+# Remove or comment out to use mock data only:
 yfinance>=0.2.0
 pandas>=2.0.0
 numpy>=1.24.0
@@ -45,6 +26,5 @@ numpy>=1.24.0
 # --- Development & Testing ---
 pytest>=8.0.0
 pytest-asyncio>=0.25.0
-pytest-cov>=5.0.0
 ruff>=0.8.0
 mypy>=1.13.0
