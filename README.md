@@ -9,9 +9,9 @@
 <h3 align="center">AI-Native Financial Intelligence & Wealth Management Platform</h3>
 
 <p align="center">
-  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python&logoColor=white" alt="Python"></a>
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/Python-3.9+-3776AB?style=flat&logo=python&logoColor=white" alt="Python"></a>
   <a href="https://nextjs.org/"><img src="https://img.shields.io/badge/Next.js-15.0-000000?style=flat&logo=nextdotjs&logoColor=white" alt="Next.js"></a>
-  <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-0.115-009688?style=flat&logo=fastapi&logoColor=white" alt="FastAPI"></a>
+  <a href="https://www.tornadoweb.org/"><img src="https://img.shields.io/badge/Tornado-6.5-009688?style=flat&logo=python&logoColor=white" alt="Tornado"></a>
   <a href="https://www.langchain.com/langgraph"><img src="https://img.shields.io/badge/LangGraph-0.2-1c3c3c?style=flat&logo=langchain&logoColor=white" alt="LangGraph"></a>
   <a href="https://www.trychroma.com/"><img src="https://img.shields.io/badge/ChromaDB-0.5-FF6F61?style=flat&logo=data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHJ4PSI0IiBmaWxsPSIjRkY2RjYxIi8+PHRleHQgeD0iMTIiIHk9IjE2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSJ3aGl0ZSIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjEyIiBmb250LXdlaWdodD0iYm9sZCI+QzwvdGV4dD48L3N2Zz4=" alt="ChromaDB"></a>
   <a href="https://www.docker.com/"><img src="https://img.shields.io/badge/Docker-Compose-2496ED?style=flat&logo=docker&logoColor=white" alt="Docker"></a>
@@ -141,18 +141,18 @@ graph TB
 ### Prerequisites
 
 - **Docker** & **Docker Compose** v2+
-- **OpenAI API Key** (or any OpenAI-compatible endpoint)
-- **Node.js 22+** and **Python 3.11+** (for local development without Docker)
+- **LLM API Key** (DeepSeek, OpenAI, Zhipu GLM, Qwen — any OpenAI-compatible provider)
+- **Node.js 22+** and **Python 3.9+** (for local development without Docker)
 
 ### 1. Clone & Configure
 
 ```bash
-git clone https://github.com/your-org/smartcycle.git
-cd smartcycle
+git clone https://github.com/marylabeallisvito-byte/SmartCycle.git
+cd SmartCycle
 
 # Copy and edit environment variables
-cp .env.example .env
-# → Set OPENAI_API_KEY, tweak DB passwords, etc.
+cp .env.example backend/.env
+# → Set LLM_API_KEY to your provider's key, tweak DB passwords, etc.
 ```
 
 ### 2. Docker Compose (Recommended)
@@ -170,7 +170,19 @@ docker compose up --build
 
 ### 3. Local Development
 
-**Backend:**
+**Backend (Tornado — no pip install needed for core deps):**
+```bash
+cd backend
+# Copy env template and add your LLM_API_KEY
+cp ../.env.example .env
+# Start the Tornado API server
+PYTHONPATH=. python server_tornado.py
+# → http://localhost:8000
+# → POST /api/v1/chat
+# → GET  /api/v1/health
+```
+
+**Backend (FastAPI — requires pip install):**
 ```bash
 cd backend
 python -m venv .venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
@@ -195,43 +207,40 @@ smartcycle/
 ├── .github/
 │   └── workflows/ci.yml              # CI/CD — lint, typecheck, test, build
 ├── backend/
+│   ├── server_tornado.py             # ★ Primary API server (Tornado, async)
 │   ├── app/
-│   │   ├── main.py                   # FastAPI entry point
+│   │   ├── agents.py                 # ★ 4-node agent pipeline (LangGraph)
+│   │   ├── graph.py                  # StateGraph compilation + fallback
+│   │   ├── llm.py                    # Universal LLM abstraction (OpenAI-compatible)
+│   │   ├── tools.py                  # Real-time data: akshare + yfinance + DuckDuckGo
+│   │   ├── schema.py                 # Pydantic models + AgentState TypedDict
+│   │   ├── main.py                   # FastAPI entry point (optional)
 │   │   ├── core/
 │   │   │   ├── config.py             # Pydantic-settings configuration
 │   │   │   └── security.py           # JWT auth & password hashing
-│   │   ├── api/v1/
-│   │   │   ├── router.py             # Aggregated v1 router
-│   │   │   └── endpoints/            # copilot, companion, compliance
-│   │   ├── agents/
-│   │   │   ├── graph.py              # LangGraph state machine
-│   │   │   └── nodes/                # market_analyst, portfolio_advisor, compliance_checker
-│   │   ├── rag/
-│   │   │   ├── embeddings.py         # Document chunking & embedding
-│   │   │   ├── retriever.py          # Hybrid search (dense + sparse)
-│   │   │   └── vector_store.py       # ChromaDB client
-│   │   ├── models/                   # SQLAlchemy ORM models
-│   │   └── services/                 # Business logic (market data, LLM, etc.)
+│   │   ├── api/v1/                   # REST API stubs
+│   │   ├── models/                   # SQLAlchemy ORM stubs
+│   │   ├── rag/                      # RAG pipeline stubs
+│   │   └── services/                 # Business logic stubs
 │   ├── tests/
 │   ├── requirements.txt
 │   ├── Dockerfile
 │   └── alembic.ini
 ├── frontend/
 │   ├── src/
-│   │   ├── app/                      # Next.js App Router
+│   │   ├── app/                      # Next.js App Router (dashboard + layout)
 │   │   ├── components/
-│   │   │   ├── ui/                   # shadcn/ui-style primitives
-│   │   │   ├── charts/               # ECharts + Three.js visualizations
-│   │   │   └── copilot/              # B-end specific components
-│   │   ├── hooks/                    # Custom React hooks
-│   │   ├── lib/                      # Utilities & API client
+│   │   │   ├── ChatInterface.tsx     # Chat + Compliance Shield + Agent Trace
+│   │   │   ├── Client3DProfile.tsx   # Three.js 3D risk profile visualization
+│   │   │   └── charts/               # ECharts sunburst/donut
+│   │   ├── lib/                      # API client, chat hook, mock data, utils
 │   │   └── types/                    # TypeScript type definitions
 │   ├── package.json
 │   ├── tsconfig.json
 │   ├── tailwind.config.ts
 │   └── Dockerfile
 ├── docker-compose.yml                # Full-stack orchestration
-├── .env.example
+├── .env.example                      # Environment template
 └── README.md
 ```
 
@@ -257,12 +266,12 @@ smartcycle/
 | Layer | Technology | Why |
 |---|---|---|
 | **Frontend** | Next.js 15, TailwindCSS, ECharts, Three.js | SSR for SEO, beautiful data viz, 3D portfolio views |
-| **API Gateway** | FastAPI (async), WebSocket | High-performance async, native streaming support |
+| **API Gateway** | Tornado 6.5 (primary) / FastAPI (optional) | Async-native, Python 3.9 compatible |
 | **Agent Framework** | LangGraph + LangChain | Stateful multi-agent orchestration with checkpointing |
 | **Vector Store** | ChromaDB | Open-source, local-first, ideal for sensitive financial data |
 | **Relational DB** | PostgreSQL 16 + pgvector | ACID compliance + vector search in one system |
 | **Cache / Broker** | Redis | Session caching, async task queue |
-| **LLM** | GPT-4o (OpenAI-compatible) | Swap with any provider via OpenAI-compatible API |
+| **LLM** | DeepSeek / GPT-4o / Zhipu GLM / Qwen | OpenAI-compatible, configurable via LLM_BASE_URL |
 | **Infra** | Docker Compose, GitHub Actions | Reproducible dev environments, CI/CD |
 
 ---
@@ -288,7 +297,7 @@ We welcome contributions from the fintech and AI communities.
 4. Push to the branch: `git push origin feature/amazing-feature`
 5. Open a Pull Request
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines (coming soon).
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 
 ---
 

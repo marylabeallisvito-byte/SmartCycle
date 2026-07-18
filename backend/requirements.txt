@@ -1,13 +1,16 @@
 # ============================================================
-# SmartCycle (金仕达·智循) — Backend Dependencies
-# Python 3.11+  |  FastAPI + LangGraph + ChromaDB
+# SmartCycle — Core Backend Dependencies
+# Python 3.9+  |  Tornado + LangGraph + Pydantic
+#
+# For RAG / embeddings support, also install:
+#   chromadb>=0.5.0  sentence-transformers>=3.0.0
 # ============================================================
 
 # --- Web Framework & Server ---
+tornado>=6.5.0
 fastapi>=0.115.0
 uvicorn[standard]>=0.34.0
 python-multipart>=0.0.18
-starlette>=0.41.0
 
 # --- AI / LLM Orchestration ---
 langgraph>=0.2.0
@@ -17,10 +20,6 @@ langchain-openai>=0.2.0
 langchain-community>=0.3.0
 langchain-text-splitters>=0.3.0
 
-# --- Vector Database & Embeddings ---
-chromadb>=0.5.0
-sentence-transformers>=3.0.0
-
 # --- Data Validation & Serialization ---
 pydantic>=2.10.0
 pydantic-settings>=2.7.0
@@ -29,27 +28,19 @@ alembic>=1.14.0
 asyncpg>=0.30.0
 psycopg2-binary>=2.9.0
 
-# --- Async & Caching ---
-redis>=5.0.0
+# --- Async & HTTP ---
 httpx>=0.28.0
-celery>=5.4.0
-
-# --- Observability & Logging ---
-loguru>=0.7.0
-opentelemetry-api>=1.28.0
-opentelemetry-sdk>=1.28.0
-opentelemetry-instrumentation-fastapi>=0.49b0
+redis>=5.0.0
 
 # --- Security ---
 python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.0
 python-dotenv>=1.0.0
 
-# --- Financial Data ---
+# --- Financial Data (lightweight) ---
 yfinance>=0.2.0
 pandas>=2.0.0
 numpy>=1.24.0
-ta>=0.11.0
 
 # --- Development & Testing ---
 pytest>=8.0.0
