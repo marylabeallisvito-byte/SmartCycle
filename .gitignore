@@ -57,6 +57,9 @@ htmlcov/
 .coverage
 .hypothesis/
 
+# --- ChromaDB mock data (auto-generated vector cache) ---
+.chroma_mock/
+
 # --- Misc ---
 *.tmp
 .cache/

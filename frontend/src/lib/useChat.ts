@@ -1,22 +1,49 @@
 "use client";
 
 /* ============================================================
-   SmartCycle — useChat Hook
+   SmartCycle — useChat Hook (Phase 7 Enhanced)
    ============================================================
 
-   Replaces the Phase 3 mock simulateAIResponse() with real
-   HTTP calls to the FastAPI backend (POST /api/v1/chat).
-
-   Responsibilities:
-     • Serialise the selected ClientProfile to snake_case
-     • POST the AdvisorQuery to the backend
-     • Map the AIResponse → ChatMessage (with AgentTrace)
-     • Expose isLoading / error for the UI layer
+   Features:
+     • Real HTTP calls to Tornado backend (POST /api/v1/chat)
+     • AbortController for cancellation
+     • Pipeline progress tracking (per-node status)
+     • Configurable timeout
+     • Error handling with user-friendly messages
 ============================================================ */
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { chatWithAgent } from "./api";
-import type { ClientProfile, ChatMessage, AgentTrace } from "./mockData";
+import type { ClientProfile } from "./mockData";
+import type { ChatMessage, AgentTrace } from "@/types";
+
+// ═══════════════════════════════════════════════════════════════
+// Types
+// ═══════════════════════════════════════════════════════════════
+
+/** Which pipeline node is currently executing. */
+export type PipelineStage =
+  | "idle"
+  | "router"
+  | "researcher"
+  | "copilot"
+  | "compliance"
+  | "done"
+  | "error"
+  | "cancelled";
+
+/** Progress info emitted during pipeline execution. */
+export interface PipelineProgress {
+  stage: PipelineStage;
+  detail: string;
+  startedAt?: number;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Default timeout (ms) — LLM calls may take 20-60s
+// ═══════════════════════════════════════════════════════════════
+
+const DEFAULT_TIMEOUT_MS = 90_000; // 90 seconds
 
 // ═══════════════════════════════════════════════════════════════
 // Helpers
@@ -40,9 +67,6 @@ function toBackendProfile(client: ClientProfile) {
 /**
  * Normalize backend snake_case market_data entries to the camelCase
  * shape expected by ChatInterface's AgentTraceAccordion.
- *
- * Backend: { "000300": { name_cn: "沪深300", price: 3987.45, ... } }
- * Frontend expects: { "000300": { nameCn: "沪深300", price: 3987.45, ... } }
  */
 function normalizeMarketData(
   raw: Record<string, unknown> | undefined,
@@ -53,7 +77,6 @@ function normalizeMarketData(
     if (val && typeof val === "object" && !Array.isArray(val)) {
       const entry: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(val as Record<string, unknown>)) {
-        // Map snake_case keys to camelCase for the ChatInterface
         if (k === "name_cn") entry["nameCn"] = v;
         else if (k === "change_pct") entry["changePct"] = v;
         else if (k === "pe_ttm") entry["peTtm"] = v;
@@ -78,20 +101,93 @@ function normalizeMarketData(
 export function useChat(selectedClient: ClientProfile | null) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<PipelineProgress>({
+    stage: "idle",
+    detail: "",
+  });
+
+  // AbortController ref for cancellation
+  const abortRef = useRef<AbortController | null>(null);
+
+  /** Cancel the currently running request. */
+  const cancelRequest = useCallback(() => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+      setIsLoading(false);
+      setProgress({ stage: "cancelled", detail: "Request cancelled by user" });
+    }
+  }, []);
 
   const sendMessage = useCallback(
     async (text: string): Promise<ChatMessage> => {
+      // Cancel any in-flight request
+      if (abortRef.current) {
+        abortRef.current.abort();
+      }
+
+      const controller = new AbortController();
+      abortRef.current = controller;
+
       setIsLoading(true);
       setError(null);
+      setProgress({ stage: "router", detail: "Classifying query...", startedAt: Date.now() });
+
+      // ── Timeout ──
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, DEFAULT_TIMEOUT_MS);
 
       try {
+        // ── Simulate pipeline progress ──
+        // NOTE: These setTimeout-based progress updates are SIMULATED.
+        // To wire to real server-side pipeline events:
+        //   1. Connect to /ws/v1/chat WebSocket (see createReconnectingWebSocket in api.ts)
+        //   2. Listen for 'stage_update' events: { stage, detail, timestamp }
+        //   3. Replace these fixed timeouts with the WebSocket message handler.
+        //   4. See docs/architecture.md §WebSocket for the event format.
+        const progressTimer1 = setTimeout(
+          () => setProgress({ stage: "researcher", detail: "Fetching market data & RAG context...", startedAt: Date.now() }),
+          200,
+        );
+        const progressTimer2 = setTimeout(
+          () => setProgress({ stage: "copilot", detail: "Generating empathetic response...", startedAt: Date.now() }),
+          600,
+        );
+        const progressTimer3 = setTimeout(
+          () => setProgress({ stage: "compliance", detail: "Screening for compliance...", startedAt: Date.now() }),
+          1000,
+        );
+
         // ── Call the real backend ──
-        const response = await chatWithAgent({
-          query: text,
-          client_profile: selectedClient
-            ? toBackendProfile(selectedClient)
-            : undefined,
-        });
+        const response = await chatWithAgent(
+          {
+            query: text,
+            client_profile: selectedClient
+              ? toBackendProfile(selectedClient)
+              : undefined,
+          },
+          controller.signal,
+        );
+
+        // Cleanup progress timers
+        clearTimeout(progressTimer1);
+        clearTimeout(progressTimer2);
+        clearTimeout(progressTimer3);
+        clearTimeout(timeoutId);
+
+        // Check if cancelled during the request
+        if (controller.signal.aborted) {
+          return {
+            id: `msg-${Date.now()}`,
+            role: "assistant" as const,
+            content: "⏹️ 请求已取消。",
+            timestamp: new Date().toISOString(),
+            compliancePassed: false,
+          };
+        }
+
+        setProgress({ stage: "done", detail: "Complete", startedAt: Date.now() });
 
         // ── Build AgentTrace from backend response ──
         const rawData = response.raw_data || {};
@@ -129,11 +225,28 @@ export function useChat(selectedClient: ClientProfile | null) {
           agentTrace,
         };
       } catch (err) {
+        clearTimeout(timeoutId);
+
+        if (controller.signal.aborted) {
+          setProgress({ stage: "cancelled", detail: "Request cancelled or timed out" });
+          // Distinguish user cancel vs timeout
+          const isTimeout = !abortRef.current;
+          return {
+            id: `msg-${Date.now()}`,
+            role: "assistant" as const,
+            content: isTimeout
+              ? "⏰ 请求超时。系统处理时间较长，请简化问题后重试。\n\n> Request timed out. Please try a simpler query."
+              : "⏹️ 请求已取消。",
+            timestamp: new Date().toISOString(),
+            compliancePassed: false,
+          };
+        }
+
         const message =
           err instanceof Error ? err.message : "Unknown error";
         setError(message);
+        setProgress({ stage: "error", detail: message });
 
-        // Return a user-visible error message so the chat doesn't break
         console.error("[useChat] Pipeline error:", err);
         return {
           id: `msg-${Date.now()}`,
@@ -143,6 +256,8 @@ export function useChat(selectedClient: ClientProfile | null) {
           compliancePassed: false,
         };
       } finally {
+        clearTimeout(timeoutId);
+        abortRef.current = null;
         setIsLoading(false);
       }
     },
@@ -150,7 +265,10 @@ export function useChat(selectedClient: ClientProfile | null) {
   );
 
   /** Reset the error state (e.g. after displaying a toast). */
-  const clearError = useCallback(() => setError(null), []);
+  const clearError = useCallback(() => {
+    setError(null);
+    setProgress({ stage: "idle", detail: "" });
+  }, []);
 
-  return { sendMessage, isLoading, error, clearError };
+  return { sendMessage, cancelRequest, isLoading, error, progress, clearError };
 }

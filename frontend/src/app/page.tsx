@@ -12,24 +12,23 @@
    All interactive — strictly client-rendered.
 ============================================================ */
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   BarChart3,
   Bot,
   ChevronRight,
-  CircleDollarSign,
   Gauge,
   Layers,
   LogOut,
   Search,
   Settings,
-  TrendingUp,
   Users,
   Zap,
 } from "lucide-react";
 
 import ChatInterface from "@/components/ChatInterface";
 import Client3DProfile from "@/components/Client3DProfile";
+import MarketTicker from "@/components/MarketTicker";
 import AssetAllocationChart from "@/components/charts/AssetAllocationChart";
 
 import {
@@ -73,13 +72,34 @@ export default function DashboardPage() {
   const [selectedClientId, setSelectedClientId] = useState<string>("c-001");
   const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MESSAGE]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Compute total AUM from mock clients
+  const totalAum = useMemo(
+    () => MOCK_CLIENTS.reduce((sum, c) => sum + c.aumYuan, 0),
+    [],
+  );
+
+  // Filter clients by search query
+  const filteredClients = useMemo(() => {
+    if (!searchQuery.trim()) return MOCK_CLIENTS;
+    const q = searchQuery.toLowerCase();
+    return MOCK_CLIENTS.filter(
+      (c) =>
+        c.nameCn.includes(q) ||
+        c.name.toLowerCase().includes(q) ||
+        c.id.includes(q),
+    );
+  }, [searchQuery]);
 
   const selectedClient =
-    MOCK_CLIENTS.find((c) => c.id === selectedClientId) ?? MOCK_CLIENTS[0];
-  const allocations = MOCK_ALLOCATIONS[selectedClientId] ?? [];
+    filteredClients.find((c) => c.id === selectedClientId) ?? filteredClients[0];
+  const allocations = selectedClient
+    ? (MOCK_ALLOCATIONS[selectedClient.id] ?? [])
+    : [];
 
   // ── Real API wiring (replaces Phase 3 mock) ──
-  const { sendMessage, isLoading } = useChat(selectedClient);
+  const { sendMessage, cancelRequest, isLoading, progress } = useChat(selectedClient);
 
   const handleSend = useCallback(
     async (text: string) => {
@@ -123,6 +143,7 @@ export default function DashboardPage() {
           <button
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
             className="ml-auto rounded-lg p-1 text-[#64748b] hover:bg-[#141428] hover:text-[#e2e8f0] transition-colors"
+            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
             <ChevronRight
               className={`h-4 w-4 transition-transform ${sidebarCollapsed ? "rotate-180" : ""}`}
@@ -136,11 +157,11 @@ export default function DashboardPage() {
             <div className="grid grid-cols-2 gap-2">
               <div className="rounded-lg bg-[#0f0f1e] p-2.5">
                 <p className="text-2xs text-[#64748b]">AUM</p>
-                <p className="text-sm font-semibold font-mono text-[#e2e8f0]">¥4.2亿</p>
+                <p className="text-sm font-semibold font-mono text-[#e2e8f0]">{fmtCNY(totalAum)}</p>
               </div>
               <div className="rounded-lg bg-[#0f0f1e] p-2.5">
                 <p className="text-2xs text-[#64748b]">Clients</p>
-                <p className="text-sm font-semibold font-mono text-[#e2e8f0]">{MOCK_CLIENTS.length}</p>
+                <p className="text-sm font-semibold font-mono text-[#e2e8f0]">{filteredClients.length}</p>
               </div>
             </div>
           </div>
@@ -151,16 +172,20 @@ export default function DashboardPage() {
           <nav className="px-3 py-2 space-y-0.5">
             {[
               { icon: Bot, label: "AI Copilot", active: true },
-              { icon: BarChart3, label: "Market Monitor" },
-              { icon: Layers, label: "Portfolios" },
-              { icon: Users, label: "Client Management" },
-              { icon: Gauge, label: "Risk Analytics" },
-            ].map(({ icon: Icon, label, active }) => (
+              { icon: BarChart3, label: "Market Monitor", disabled: true },
+              { icon: Layers, label: "Portfolios", disabled: true },
+              { icon: Users, label: "Client Management", disabled: true },
+              { icon: Gauge, label: "Risk Analytics", disabled: true },
+            ].map(({ icon: Icon, label, active, disabled }) => (
               <button
                 key={label}
+                disabled={disabled}
+                title={disabled ? `${label} — Coming in Phase 8` : label}
                 className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
                   active
                     ? "bg-[#00d4ff]/10 text-[#00d4ff]"
+                    : disabled
+                    ? "text-[#475569] cursor-not-allowed"
                     : "text-[#94a3b8] hover:bg-[#141428] hover:text-[#e2e8f0]"
                 }`}
               >
@@ -183,7 +208,7 @@ export default function DashboardPage() {
 
         {/* Client List */}
         <div className="flex-1 overflow-y-auto px-3 pb-4 space-y-1">
-          {MOCK_CLIENTS.map((client) => {
+          {filteredClients.map((client) => {
             const badge = riskBadge(client.riskTolerance);
             const isActive = client.id === selectedClientId;
             return (
@@ -251,22 +276,16 @@ export default function DashboardPage() {
       <main className="flex flex-1 flex-col min-w-0 border-r border-[#1e2948]">
         {/* Mini top bar */}
         <div className="flex items-center gap-3 border-b border-[#1e2948] bg-[#0a0a14] px-5 py-2.5">
-          <Search className="h-3.5 w-3.5 text-[#64748b]" />
+          <Search className="h-3.5 w-3.5 text-[#64748b]" aria-hidden="true" />
           <input
             placeholder="Search clients, tickers, or topics..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
             className="flex-1 bg-transparent text-sm text-[#e2e8f0] placeholder-[#64748b] outline-none"
+            aria-label="Search clients, tickers, or topics"
           />
           <div className="hidden items-center gap-3 text-xs text-[#64748b] lg:flex">
-            <span className="flex items-center gap-1">
-              <CircleDollarSign className="h-3 w-3 text-[#10b981]" />
-              CSI 300: 3,987.45
-              <span className="text-[#10b981]">+0.58%</span>
-            </span>
-            <span className="flex items-center gap-1">
-              <TrendingUp className="h-3 w-3 text-[#f59e0b]" />
-              SHCOMP: 3,245.12
-              <span className="text-[#ef4444]">-0.31%</span>
-            </span>
+            <MarketTicker />
           </div>
         </div>
 
@@ -277,6 +296,8 @@ export default function DashboardPage() {
             onSend={handleSend}
             isLoading={isLoading}
             selectedClientName={selectedClient?.nameCn}
+            onCancel={cancelRequest}
+            progress={progress}
           />
         </div>
       </main>
@@ -285,6 +306,14 @@ export default function DashboardPage() {
           RIGHT PANEL — Client Insights
           ═══════════════════════════════════════════════════════ */}
       <aside className="w-[400px] shrink-0 overflow-y-auto bg-[#0a0a14] p-4 space-y-4">
+        {!selectedClient ? (
+          <div className="surface-card p-8 text-center">
+            <Users className="mx-auto h-8 w-8 text-[#475569] mb-3" />
+            <p className="text-sm text-[#64748b]">No client selected</p>
+            <p className="text-2xs text-[#475569] mt-1">Select a client from the sidebar to view their profile.</p>
+          </div>
+        ) : (
+          <>
         {/* Client header card */}
         <div className="surface-card p-4">
           <div className="flex items-center gap-3">
@@ -381,6 +410,8 @@ export default function DashboardPage() {
             ))}
           </div>
         </div>
+          </>
+        )}
       </aside>
     </div>
   );

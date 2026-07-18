@@ -2,6 +2,10 @@
    SmartCycle — Mock Data for Advisor Copilot Dashboard
    ============================================================ */
 
+// ── Re-export canonical ChatMessage & AgentTrace from types ──
+import type { ChatMessage, AgentTrace } from "@/types";
+export type { ChatMessage, AgentTrace };
+
 // ── Client types ──
 
 export interface ClientProfile {
@@ -26,31 +30,6 @@ export interface PortfolioAllocation {
   valueYuan: number;
   color: string;
   children?: PortfolioAllocation[];
-}
-
-export interface ChatMessage {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  timestamp: string;
-  compliancePassed?: boolean;
-  agentTrace?: AgentTrace;
-}
-
-export interface AgentTrace {
-  queryCategory: string;
-  rawData: {
-    marketData?: Record<string, unknown>;
-    ragContext?: Array<{ title: string; source: string; snippet: string }>;
-  };
-  draftResponse: string;
-  complianceFlags: Array<{
-    rule: string;
-    severity: string;
-    bannedPhrase: string;
-    suggestion: string;
-  }>;
-  revisionCount: number;
 }
 
 // ── Clients ──
@@ -159,7 +138,8 @@ export const MOCK_ALLOCATIONS: Record<string, PortfolioAllocation[]> = {
   ],
 };
 
-// ── Sample agent trace (for the ChatInterface accordion) ──
+// ── Sample agent trace (for demo / testing the ChatInterface accordion) ──
+// Available for import but not used by the main dashboard (replaced by live API data).
 
 export const MOCK_AGENT_TRACE: AgentTrace = {
   queryCategory: "emotional_support",

@@ -44,12 +44,37 @@ export interface AssetAllocation {
 }
 
 // --- Chat ---
+
+/** ChatMessage used by the ChatInterface (frontend canonical type).
+ *  Re-exported by mockData.ts for backward compatibility.
+ *
+ *  This is the UI-facing message shape, distinct from the backend's
+ *  transport shape (AIResponse) which goes through useChat's adapter.
+ */
 export interface ChatMessage {
   id: string;
-  role: "user" | "assistant" | "system";
+  role: "user" | "assistant";
   content: string;
   timestamp: string;
-  complianceStatus?: "passed" | "modified" | "blocked";
+  compliancePassed?: boolean;
+  agentTrace?: AgentTrace;
+}
+
+/** Agent trace metadata shown in the ChatInterface accordion. */
+export interface AgentTrace {
+  queryCategory: string;
+  rawData: {
+    marketData?: Record<string, unknown>;
+    ragContext?: Array<{ title: string; source: string; snippet: string }>;
+  };
+  draftResponse: string;
+  complianceFlags: Array<{
+    rule: string;
+    severity: string;
+    bannedPhrase: string;
+    suggestion: string;
+  }>;
+  revisionCount: number;
 }
 
 // --- Compliance ---

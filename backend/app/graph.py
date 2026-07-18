@@ -45,6 +45,7 @@ Usage:
     result = await smartcycle_graph.ainvoke(initial_state)
 """
 
+import logging
 from typing import Any, Dict
 
 from app.agents import (
@@ -55,6 +56,8 @@ from app.agents import (
     router_node,
 )
 from app.schema import AgentState
+
+logger = logging.getLogger("smartcycle.graph")
 
 # ═══════════════════════════════════════════════════════════════
 # Conditional Edge — Compliance Gate
@@ -182,6 +185,11 @@ class _SimplePipeline:
 try:
     smartcycle_graph = _build_langgraph_graph()
     _USING_LANGGRAPH = True
-except (ImportError, Exception):
+except ImportError:
+    logger.info("[graph] langgraph not installed — using _SimplePipeline fallback")
+    smartcycle_graph = _SimplePipeline()
+    _USING_LANGGRAPH = False
+except Exception:
+    logger.warning("[graph] langgraph compilation failed — using _SimplePipeline fallback", exc_info=True)
     smartcycle_graph = _SimplePipeline()
     _USING_LANGGRAPH = False

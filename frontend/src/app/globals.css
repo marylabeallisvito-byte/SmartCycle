@@ -46,6 +46,17 @@
   .status-dot {
     @apply inline-block h-2 w-2 rounded-full;
   }
+  .status-dot-active {
+    @apply bg-[#10b981];
+    box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+  }
+  .status-dot-inactive {
+    @apply bg-[#475569];
+  }
+  .status-dot-warning {
+    @apply bg-[#f59e0b];
+    box-shadow: 0 0 6px rgba(245, 158, 11, 0.6);
+  }
   .data-badge {
     @apply inline-flex items-center gap-1 rounded-md bg-[#141428] px-2 py-0.5
            font-mono text-xs text-[#94a3b8] border border-[#1e2948];

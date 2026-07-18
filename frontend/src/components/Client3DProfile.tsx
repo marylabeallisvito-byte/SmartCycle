@@ -21,9 +21,9 @@
    a static table of client attributes.
 ============================================================ */
 
-import { Suspense, useMemo, useRef } from "react";
+import { Suspense, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { OrbitControls, Sphere, Line, Text } from "@react-three/drei";
+import { OrbitControls, Sphere, Line } from "@react-three/drei";
 import * as THREE from "three";
 
 // ═══════════════════════════════════════════════════════════════
@@ -252,6 +252,21 @@ function labelForAnxiety(anxiety: string): { text: string; color: string } {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// WebGL availability check
+// ═══════════════════════════════════════════════════════════════
+
+function checkWebGLSupport(): boolean {
+  try {
+    const canvas = document.createElement("canvas");
+    return !!(
+      canvas.getContext("webgl") || canvas.getContext("webgl2")
+    );
+  } catch {
+    return false;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Public component
 // ═══════════════════════════════════════════════════════════════
 
@@ -263,6 +278,7 @@ export default function Client3DProfile({
 }: Props) {
   const riskInfo = labelForRisk(riskTolerance);
   const anxietyInfo = labelForAnxiety(anxietyLevel);
+  const [webglSupported] = useState(() => checkWebGLSupport());
 
   return (
     <div className={`surface-card overflow-hidden ${className}`}>
@@ -288,55 +304,85 @@ export default function Client3DProfile({
         </div>
       </div>
 
-      {/* ── 3D Canvas ── */}
+      {/* ── 3D Canvas (or fallback) ── */}
       <div className="relative h-[260px] w-full">
-        <Canvas
-          camera={{ position: [0, 0.2, 4.2], fov: 45 }}
-          gl={{ antialias: true, alpha: true }}
-          dpr={[1, 1.5]}
-        >
-          <ambientLight intensity={0.4} />
-          <pointLight position={[3, 2, 3]} intensity={0.8} color={riskInfo.color} />
-          <pointLight position={[-3, -1, -2]} intensity={0.3} color="#00d4ff" />
-          <Suspense fallback={null}>
-            <ProfileGeometry
-              riskTolerance={riskTolerance}
-              anxietyLevel={anxietyLevel}
+        {webglSupported ? (
+          <Canvas
+            camera={{ position: [0, 0.2, 4.2], fov: 45 }}
+            gl={{ antialias: true, alpha: true }}
+            dpr={[1, 1.5]}
+          >
+            <ambientLight intensity={0.4} />
+            <pointLight position={[3, 2, 3]} intensity={0.8} color={riskInfo.color} />
+            <pointLight position={[-3, -1, -2]} intensity={0.3} color="#00d4ff" />
+            <Suspense fallback={null}>
+              <ProfileGeometry
+                riskTolerance={riskTolerance}
+                anxietyLevel={anxietyLevel}
+              />
+            </Suspense>
+            <OrbitControls
+              enableZoom={false}
+              enablePan={false}
+              autoRotate
+              autoRotateSpeed={0.4}
+              maxPolarAngle={Math.PI * 0.7}
+              minPolarAngle={Math.PI * 0.3}
             />
-          </Suspense>
-          <OrbitControls
-            enableZoom={false}
-            enablePan={false}
-            autoRotate
-            autoRotateSpeed={0.4}
-            maxPolarAngle={Math.PI * 0.7}
-            minPolarAngle={Math.PI * 0.3}
-          />
-        </Canvas>
+          </Canvas>
+        ) : (
+          /* ── Static fallback when WebGL is unavailable ── */
+          <div className="flex h-full items-center justify-center px-6">
+            <div
+              className="flex flex-col items-center gap-3 rounded-2xl p-6 text-center"
+              style={{ backgroundColor: riskInfo.color + "10", borderColor: riskInfo.color + "30", borderWidth: 1, borderStyle: "solid" }}
+            >
+              <div
+                className="flex h-16 w-16 items-center justify-center rounded-full text-2xl font-bold"
+                style={{ backgroundColor: riskInfo.color + "20", color: riskInfo.color }}
+              >
+                {clientName.charAt(0)}
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-[#e2e8f0]">{clientName}</p>
+                <p className="text-xs text-[#94a3b8]">
+                  风险偏好: <span style={{ color: riskInfo.color }}>{riskInfo.text}</span>
+                  {" · "}
+                  情绪: <span style={{ color: anxietyInfo.color }}>{anxietyInfo.text}</span>
+                </p>
+              </div>
+              <p className="text-2xs text-[#475569]">
+                ⚠️ 您的浏览器不支持 WebGL，3D 可视化不可用
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* ── Overlay labels ── */}
-        <div className="pointer-events-none absolute bottom-3 left-0 right-0 flex justify-center gap-4">
-          <span
-            className="rounded-full border px-3 py-1 text-2xs font-medium backdrop-blur-sm"
-            style={{
-              borderColor: riskInfo.color + "40",
-              backgroundColor: riskInfo.color + "15",
-              color: riskInfo.color,
-            }}
-          >
-            {riskInfo.text}
-          </span>
-          <span
-            className="rounded-full border px-3 py-1 text-2xs font-medium backdrop-blur-sm"
-            style={{
-              borderColor: anxietyInfo.color + "40",
-              backgroundColor: anxietyInfo.color + "15",
-              color: anxietyInfo.color,
-            }}
-          >
-            {anxietyInfo.text}
-          </span>
-        </div>
+        {webglSupported && (
+          <div className="pointer-events-none absolute bottom-3 left-0 right-0 flex justify-center gap-4">
+            <span
+              className="rounded-full border px-3 py-1 text-2xs font-medium backdrop-blur-sm"
+              style={{
+                borderColor: riskInfo.color + "40",
+                backgroundColor: riskInfo.color + "15",
+                color: riskInfo.color,
+              }}
+            >
+              {riskInfo.text}
+            </span>
+            <span
+              className="rounded-full border px-3 py-1 text-2xs font-medium backdrop-blur-sm"
+              style={{
+                borderColor: anxietyInfo.color + "40",
+                backgroundColor: anxietyInfo.color + "15",
+                color: anxietyInfo.color,
+              }}
+            >
+              {anxietyInfo.text}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* ── Legend ── */}

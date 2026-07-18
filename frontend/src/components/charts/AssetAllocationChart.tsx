@@ -88,6 +88,7 @@ export default function AssetAllocationChart({
   clientName,
 }: Props) {
   const hasHierarchy = allocations.some((a) => a.children && a.children.length > 0);
+  const isEmpty = !allocations || allocations.length === 0;
 
   const option = useMemo(() => {
     const seriesData = buildSunburstData(allocations);
@@ -237,13 +238,23 @@ export default function AssetAllocationChart({
       </div>
 
       {/* Chart */}
-      <ReactECharts
-        option={option}
-        style={{ height: 320, width: "100%" }}
-        opts={{ renderer: "canvas" }}
-        notMerge
-        lazyUpdate
-      />
+      {isEmpty ? (
+        <div className="flex h-[320px] items-center justify-center">
+          <div className="text-center">
+            <div className="mb-3 text-4xl">📊</div>
+            <p className="text-sm text-[#64748b]">暂无资产配置数据</p>
+            <p className="mt-1 text-2xs text-[#475569]">No allocation data available</p>
+          </div>
+        </div>
+      ) : (
+        <ReactECharts
+          option={option}
+          style={{ height: 320, width: "100%" }}
+          opts={{ renderer: "canvas" }}
+          notMerge
+          lazyUpdate
+        />
+      )}
 
       {/* Quick stats */}
       <div className="mt-2 grid grid-cols-3 gap-2">

@@ -47,7 +47,7 @@ from app.schema import (
     QueryCategory,
     RiskTolerance,
 )
-from app.tools import fetch_market_data, hybrid_retrieve, web_search
+from app.tools import fetch_market_data, hybrid_retrieve, web_search_async
 
 logger = logging.getLogger("smartcycle.agents")
 
@@ -55,7 +55,7 @@ logger = logging.getLogger("smartcycle.agents")
 # Constants
 # ═══════════════════════════════════════════════════════════════
 
-MAX_RETRIES = 3  # tradingagents: max compliance loop-back iterations
+MAX_RETRIES = int(os.getenv("COMPLIANCE_MAX_RETRIES", "3"))  # tradingagents: max compliance loop-back iterations
 
 # ── Banned terms (tradingagents-style keyword blocklist) ──────
 # These are regex patterns; case-insensitive matching is applied.
@@ -94,20 +94,31 @@ BANNED_PATTERNS: List[Tuple[str, str, str]] = [
     (r"承诺\s*收益",                "critical", "Remove; investment returns cannot be promised."),
 ]
 
-# ── Hardcoded risk disclaimer (appended to every final_response) ──
-RISK_DISCLAIMER = (
-    "\n\n---\n"
-    "⚠️ **风险提示 / Risk Disclosure**: "
-    "本内容由AI生成，仅供参考，不构成任何投资建议。"
-    "投资有风险，入市需谨慎。过往业绩不预示未来表现。"
-    "请在做出投资决策前咨询持牌专业顾问。"
-    "\n"
-    "**Disclaimer**: This content is AI-generated and for informational purposes only. "
-    "It does not constitute investment advice. All investments carry risk, including "
-    "possible loss of principal. Past performance does not guarantee future results. "
-    "Consult a licensed financial advisor before making investment decisions."
-    f"\n\n*Compliance check timestamp: {datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}*"
-)
+# ── Risk disclaimer builder (generates fresh timestamp each call) ──
+def get_risk_disclaimer() -> str:
+    """Generate the mandatory risk disclaimer with a current timestamp.
+
+    IMPORTANT: This is a FUNCTION, not a module-level constant, because
+    the compliance timestamp must reflect the actual check time, not
+    the module import time.
+    """
+    ts = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    return (
+        "\n\n---\n"
+        "⚠️ **风险提示 / Risk Disclosure**: "
+        "本内容由AI生成，仅供参考，不构成任何投资建议。"
+        "投资有风险，入市需谨慎。过往业绩不预示未来表现。"
+        "请在做出投资决策前咨询持牌专业顾问。"
+        "\n"
+        "**Disclaimer**: This content is AI-generated and for informational purposes only. "
+        "It does not constitute investment advice. All investments carry risk, including "
+        "possible loss of principal. Past performance does not guarantee future results. "
+        "Consult a licensed financial advisor before making investment decisions."
+        f"\n\n*Compliance check timestamp: {ts}*"
+    )
+
+# Keep backward-compatible alias (lazy — still evaluates fresh per access)
+# All new code should call get_risk_disclaimer() directly.
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -190,17 +201,27 @@ async def router_node(state: AgentState) -> Dict[str, Any]:
 #   of the Empathy Copilot (Node 3).
 
 def _extract_ticker(query: str) -> Optional[str]:
-    """Extract stock ticker from query using simple patterns.
+    """Extract stock ticker from query using regex patterns.
 
     In production: use a NER model or an LLM with function calling.
     """
-    # Match Chinese A-share codes (6 digits)
-    m = re.search(r"\b(6\d{5})\b", query)
+    # Match Chinese A-share codes (6 digits starting with 0/3/6)
+    m = re.search(r"\b([0|3|6]\d{5})\b", query)
     if m:
         return m.group(1)
-    # Match common Western tickers
-    for ticker in ["NVDA", "AAPL", "TSLA", "MSFT", "GOOGL"]:
-        if ticker.lower() in query.lower():
+    # Match US stock tickers: 1-6 uppercase letters, optionally with $ prefix
+    m = re.search(r"\$?([A-Z]{1,6})\b", query)
+    if m:
+        ticker = m.group(1)
+        # Filter out common English words that aren't tickers
+        _COMMON_WORDS = {
+            "A", "I", "AN", "IS", "IT", "WE", "GO", "TO", "BY", "ON", "IN",
+            "AT", "OR", "BE", "AM", "MY", "UP", "NO", "DO", "IF", "SO",
+            "THE", "AND", "FOR", "ARE", "NOT", "YOU", "CAN", "HAS", "WAS",
+            "CEO", "USA", "API", "IPO", "GDP", "CPI", "USD", "CNY",
+            "ETF", "REIT", "ESG", "AI", "EV", "PE", "PB", "ROE", "EPS",
+        }
+        if ticker not in _COMMON_WORDS:
             return ticker
     # Match CSI 300 mentions
     if re.search(r"(?:CSI\s*300|沪深\s*300|沪深300|000300)", query, re.IGNORECASE):
@@ -236,19 +257,35 @@ async def quantitative_researcher_node(state: AgentState) -> Dict[str, Any]:
     # ── Step 2: Fetch market data (OpenBB-style) ──
     market_data: Dict[str, Any] = {}
     if ticker:
-        result = fetch_market_data.invoke({"symbol": ticker})
-        market_data[ticker] = result
+        try:
+            result = fetch_market_data.invoke({"symbol": ticker})
+            market_data[ticker] = result
+        except Exception as exc:
+            logger.warning("[agents] fetch_market_data failed for %s: %s", ticker, exc)
+            market_data[ticker] = {"status": "error", "symbol": ticker, "error": str(exc)}
     else:
         # For research/emotional queries without a ticker, fetch CSI 300 as context
         if query_category != QueryCategory.DATA_FETCHING.value:
-            benchmark = fetch_market_data.invoke({"symbol": "000300"})
-            market_data["000300"] = benchmark
+            try:
+                benchmark = fetch_market_data.invoke({"symbol": "000300"})
+                market_data["000300"] = benchmark
+            except Exception as exc:
+                logger.warning("[agents] fetch_market_data failed for 000300: %s", exc)
+                market_data["000300"] = {"status": "error", "symbol": "000300", "error": str(exc)}
 
     # ── Step 3: Hybrid retrieval (FinRAG-style) ──
-    rag_result = hybrid_retrieve.invoke({"query": query, "top_k": 3})
+    rag_result: Dict[str, Any] = {"status": "error", "results": []}
+    try:
+        rag_result = hybrid_retrieve.invoke({"query": query, "top_k": 3})
+    except Exception as exc:
+        logger.warning("[agents] hybrid_retrieve failed: %s", exc)
 
     # ── Step 4: Web search for real-time context ──
-    web_context = web_search(query, max_results=3)
+    web_context: List[Dict[str, str]] = []
+    try:
+        web_context = await web_search_async(query, max_results=3)
+    except Exception as exc:
+        logger.warning("[agents] web_search_async failed: %s", exc)
 
     # ── Step 5: Bundle into raw_data ──
     # IMPORTANT: raw_data is a STRUCTURED DICT, not prose.
@@ -820,12 +857,13 @@ async def compliance_gatekeeper_node(state: AgentState) -> Dict[str, Any]:
 
     if compliance_passed:
         # ── PASS 3: Attach disclaimer & release ──
-        final = draft + RISK_DISCLAIMER
+        disclaimer = get_risk_disclaimer()
+        final = draft + disclaimer
         return {
             "compliance_passed": True,
             "compliance_report": {"flags": [], "risk_rating": _assess_risk_rating(draft, profile), "passed": True},
             "final_response": final,
-            "disclaimer": RISK_DISCLAIMER,
+            "disclaimer": disclaimer,
             "iteration_count": iteration + 1,
         }
 
@@ -837,6 +875,7 @@ async def compliance_gatekeeper_node(state: AgentState) -> Dict[str, Any]:
         # After max retries, the system's regulatory obligation supersedes UX.
         query = state.get("query", "")
         quoted = query[:80] + ("..." if len(query) > 80 else "")
+        disclaimer = get_risk_disclaimer()
         force_response = (
             f"我们无法针对您的请求「{quoted}」生成合规的个性化回复。"
             "以下是标准化的市场信息及风险提示。\n\n"
@@ -853,8 +892,8 @@ async def compliance_gatekeeper_node(state: AgentState) -> Dict[str, Any]:
                 "passed": False,
                 "force_override": True,
             },
-            "final_response": force_response + RISK_DISCLAIMER,
-            "disclaimer": RISK_DISCLAIMER,
+            "final_response": force_response + disclaimer,
+            "disclaimer": disclaimer,
             "revision_notes": [],
             "iteration_count": iteration + 1,
         }

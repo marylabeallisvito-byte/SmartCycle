@@ -55,21 +55,23 @@ graph TB
     end
 
     subgraph "API Gateway"
-        GW[FastAPI<br/>REST + WebSocket]
+        GW[Tornado 6.5<br/>REST + WebSocket]
     end
 
-    subgraph "Agent Orchestration — LangGraph"
+    subgraph "Agent Pipeline — 4-Node LangGraph"
         direction LR
-        MA[📊 Market Analyst<br/>RAG-powered]
-        PA[📈 Portfolio Advisor<br/>Risk-aware]
-        CC[🛡️ Compliance Checker<br/>Regulatory validation]
-        MA --> PA --> CC
+        N1[🔀 Router<br/>Query Classification]
+        N2[📊 Quantitative Researcher<br/>Tool-Only · FinRobot-style]
+        N3[💬 Empathy Copilot<br/>LLM Narrative Only]
+        N4[🛡️ Compliance Gatekeeper<br/>Adversarial · tradingagents-style]
+        N1 --> N2 --> N3 --> N4
+        N4 -.->|retry if flagged| N3
     end
 
     subgraph "Intelligence Layer"
-        RAG[🔍 RAG Pipeline<br/>LangChain + ChromaDB]
-        LLM[🧠 LLM Provider<br/>OpenAI-compatible API]
-        EMB[📐 Embeddings<br/>BGE-large-zh + SentenceTransformers]
+        RAG[🔍 RAG Pipeline<br/>HybridRetriever + VectorStore]
+        LLM[🧠 LLM Provider<br/>DeepSeek / OpenAI-compatible]
+        EMB[📐 Embeddings<br/>BGE-large-zh / Mock hash-based]
     end
 
     subgraph "Data Layer"
@@ -79,9 +81,9 @@ graph TB
     end
 
     FW -->|REST / WS| GW
-    GW -->|Agent Graph| MA
-    MA <-->|Retrieve| RAG
-    MA <-->|Inference| LLM
+    GW -->|StateGraph| N1
+    N2 <-->|Retrieve| RAG
+    N3 <-->|Generate| LLM
     RAG -->|Store & Query| CH
     RAG -->|Embed| EMB
     GW --> PG
@@ -89,9 +91,10 @@ graph TB
 
     style FW fill:#000,stroke:#3b82f6,color:#fff
     style GW fill:#009688,stroke:#00695c,color:#fff
-    style MA fill:#1c3c3c,stroke:#3b82f6,color:#fff
-    style PA fill:#1c3c3c,stroke:#3b82f6,color:#fff
-    style CC fill:#1c3c3c,stroke:#3b82f6,color:#fff
+    style N1 fill:#1c3c3c,stroke:#8b5cf6,color:#fff
+    style N2 fill:#1c3c3c,stroke:#00d4ff,color:#fff
+    style N3 fill:#1c3c3c,stroke:#f59e0b,color:#fff
+    style N4 fill:#1c3c3c,stroke:#10b981,color:#fff
     style RAG fill:#4a148c,stroke:#7c4dff,color:#fff
     style LLM fill:#4a148c,stroke:#7c4dff,color:#fff
     style EMB fill:#4a148c,stroke:#7c4dff,color:#fff
@@ -103,11 +106,12 @@ graph TB
 ### Data Flow
 
 1. **User sends a query** via the Next.js frontend (REST or WebSocket for streaming).
-2. **FastAPI gateway** validates the request, resolves the user context, and dispatches to the LangGraph agent graph.
-3. **Market Analyst** retrieves relevant context from the RAG pipeline (ChromaDB) and synthesizes market conditions via the LLM.
-4. **Portfolio Advisor** combines the market analysis with the user's risk profile and goals to generate personalized advice.
-5. **Compliance Checker** screens every word against regulatory policies — flagging, rewriting, or blocking non-compliant output.
-6. **Response streams back** to the frontend with full traceability and audit logging.
+2. **Tornado API server** validates the request, resolves the user context, and dispatches to the agent graph.
+3. **Router (Node 1)** classifies the query as data_fetching, research, or emotional_support — deterministic keyword matching, no LLM.
+4. **Quantitative Researcher (Node 2)** extracts tickers, fetches market data, and retrieves RAG context — **tools only, no LLM narrative** (FinRobot separation principle).
+5. **Empathy Copilot (Node 3)** generates a tone-calibrated, risk-aware narrative — **LLM only, no tool calls**.
+6. **Compliance Gatekeeper (Node 4)** adversarially screens the draft — banned terms, suitability, and disclaimer attachment. On failure, loops back to Node 3 with revision notes (max 3 retries, then force-override).
+7. **Response streams back** to the frontend with full compliance trace and audit logging.
 
 ---
 
@@ -164,22 +168,22 @@ docker compose up --build
 # Services:
 #   Frontend  → http://localhost:3000
 #   Backend   → http://localhost:8000
-#   API Docs  → http://localhost:8000/docs
 #   ChromaDB  → http://localhost:8001
 ```
 
 ### 3. Local Development
 
-**Backend (Tornado — no pip install needed for core deps):**
+**Backend (Tornado — no extra pip install needed for core deps):**
 ```bash
 cd backend
 # Copy env template and add your LLM_API_KEY
 cp ../.env.example .env
+# Edit .env — set LLM_API_KEY to your DeepSeek/OpenAI key
 # Start the Tornado API server
-PYTHONPATH=. python server_tornado.py
+PYTHONPATH=. python -X utf8 server_tornado.py
 # → http://localhost:8000
-# → POST /api/v1/chat
-# → GET  /api/v1/health
+# → 14 endpoints available (13 REST + 1 WebSocket)
+# → Note: /docs (Swagger UI) is only available on the FastAPI server, not Tornado
 ```
 
 **Backend (FastAPI — requires pip install):**
@@ -207,22 +211,24 @@ smartcycle/
 ├── .github/
 │   └── workflows/ci.yml              # CI/CD — lint, typecheck, test, build
 ├── backend/
-│   ├── server_tornado.py             # ★ Primary API server (Tornado, async)
+│   ├── server_tornado.py             # ★ Primary API server — 13 REST + 1 WS endpoint
 │   ├── app/
-│   │   ├── agents.py                 # ★ 4-node agent pipeline (LangGraph)
-│   │   ├── graph.py                  # StateGraph compilation + fallback
-│   │   ├── llm.py                    # Universal LLM abstraction (OpenAI-compatible)
-│   │   ├── tools.py                  # Real-time data: akshare + yfinance + DuckDuckGo
+│   │   ├── agents.py                 # ★ 4-node agent pipeline (Router → Researcher → Copilot → Compliance)
+│   │   ├── graph.py                  # StateGraph compilation + _SimplePipeline fallback
+│   │   ├── llm.py                    # OpenAILikeLLM + MockLLM + env loader
+│   │   ├── tools.py                  # fetch_market_data + hybrid_retrieve + web_search
 │   │   ├── schema.py                 # Pydantic models + AgentState TypedDict
-│   │   ├── main.py                   # FastAPI entry point (optional)
+│   │   ├── main.py                   # FastAPI entry point (preserved)
 │   │   ├── core/
 │   │   │   ├── config.py             # Pydantic-settings configuration
-│   │   │   └── security.py           # JWT auth & password hashing
-│   │   ├── api/v1/                   # REST API stubs
-│   │   ├── models/                   # SQLAlchemy ORM stubs
-│   │   ├── rag/                      # RAG pipeline stubs
-│   │   └── services/                 # Business logic stubs
-│   ├── tests/
+│   │   │   └── security.py           # JWT auth & bcrypt password hashing
+│   │   ├── api/v1/
+│   │   │   ├── router.py             # FastAPI sub-router aggregation
+│   │   │   └── endpoints/            # copilot.py, companion.py, compliance.py
+│   │   ├── models/                   # SQLAlchemy ORM — 8 models with graceful stubs
+│   │   ├── rag/                      # HybridRetriever + VectorStore + EmbeddingProvider
+│   │   └── services/                 # MarketDataService, LLMService, PortfolioService
+│   ├── tests/                        # 43 tests — schema, compliance, agents
 │   ├── requirements.txt
 │   ├── Dockerfile
 │   └── alembic.ini
@@ -232,15 +238,16 @@ smartcycle/
 │   │   ├── components/
 │   │   │   ├── ChatInterface.tsx     # Chat + Compliance Shield + Agent Trace
 │   │   │   ├── Client3DProfile.tsx   # Three.js 3D risk profile visualization
+│   │   │   ├── MarketTicker.tsx      # Real-time scrolling index ticker
 │   │   │   └── charts/               # ECharts sunburst/donut
-│   │   ├── lib/                      # API client, chat hook, mock data, utils
-│   │   └── types/                    # TypeScript type definitions
+│   │   ├── lib/                      # 12 typed API functions, useChat hook, mock data, utils
+│   │   └── types/                    # TypeScript types — aligned with backend schema
 │   ├── package.json
 │   ├── tsconfig.json
 │   ├── tailwind.config.ts
 │   └── Dockerfile
-├── docker-compose.yml                # Full-stack orchestration
-├── .env.example                      # Environment template
+├── docker-compose.yml                # Full-stack orchestration (5 services)
+├── .env.example                      # 50+ config vars
 └── README.md
 ```
 
@@ -251,13 +258,21 @@ smartcycle/
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/api/v1/health` | Health check |
-| `POST` | `/api/v1/copilot/query` | B-end advisor query (RAG + agent pipeline) |
-| `POST` | `/api/v1/companion/chat` | C-end investor chat (streaming) |
-| `POST` | `/api/v1/compliance/check` | Validate text against regulatory rules |
-| `GET` | `/api/v1/market/summary` | AI-generated daily market brief |
-| `GET` | `/api/v1/portfolio/analysis` | Portfolio risk/return analytics |
+| `POST` | `/api/v1/auth/login` | JWT authentication (demo user) |
+| `POST` | `/api/v1/chat` | Full multi-agent pipeline (core) |
+| `GET` | `/api/v1/graph/info` | Agent pipeline introspection |
+| `GET` | `/api/v1/copilot` | B-end copilot service status |
+| `POST` | `/api/v1/copilot/query` | B-end advisor research query |
+| `GET` | `/api/v1/companion` | C-end companion service status |
+| `POST` | `/api/v1/companion/chat` | C-end retail investor chat |
+| `GET` | `/api/v1/compliance` | Compliance service status |
+| `POST` | `/api/v1/compliance/check` | Standalone compliance screening |
+| `GET` | `/api/v1/compliance/rules` | List active compliance rules |
+| `GET` | `/api/v1/market/summary` | Major indices snapshot |
+| `POST` | `/api/v1/portfolio/analysis` | Portfolio risk/return analytics |
+| `WS` | `/ws/v1/chat` | WebSocket streaming chat |
 
-> Full OpenAPI spec available at `http://localhost:8000/docs` after startup.
+> **14 endpoints** (including WebSocket) served by the Tornado API server on `http://localhost:8000`.
 
 ---
 
@@ -266,7 +281,7 @@ smartcycle/
 | Layer | Technology | Why |
 |---|---|---|
 | **Frontend** | Next.js 15, TailwindCSS, ECharts, Three.js | SSR for SEO, beautiful data viz, 3D portfolio views |
-| **API Gateway** | Tornado 6.5 (primary) / FastAPI (optional) | Async-native, Python 3.9 compatible |
+| **API Gateway** | Tornado 6.5 (primary) / FastAPI (preserved) | Async-native, Python 3.9 compatible |
 | **Agent Framework** | LangGraph + LangChain | Stateful multi-agent orchestration with checkpointing |
 | **Vector Store** | ChromaDB | Open-source, local-first, ideal for sensitive financial data |
 | **Relational DB** | PostgreSQL 16 + pgvector | ACID compliance + vector search in one system |
@@ -279,11 +294,13 @@ smartcycle/
 ## 🗺️ Roadmap
 
 - [x] **Phase 1** — Project scaffolding, open-source facade, CI/CD
-- [ ] **Phase 2** — Core agent graph (Market Analyst → Portfolio Advisor → Compliance Checker)
-- [ ] **Phase 3** — RAG pipeline with financial document ingestion & hybrid search
-- [ ] **Phase 4** — Streaming chat with WebSocket, real-time compliance overlays
-- [ ] **Phase 5** — Multi-tenant B-end dashboard with client management
-- [ ] **Phase 6** — Production hardening: rate limiting, observability (OTel), load testing
+- [x] **Phase 2** — Core agent graph (Router → Researcher → Copilot → Compliance Gatekeeper)
+- [x] **Phase 3** — Frontend dashboard with 3D visualization + chat interface
+- [x] **Phase 4** — Full-stack wiring, compliance hardening, Chinese banned terms
+- [x] **Phase 5** — Real LLM integration (DeepSeek) + real-time market data (akshare/yfinance)
+- [x] **Phase 6** — RAG pipeline, full API surface, test suite (43 tests), WebSocket streaming
+- [ ] **Phase 7** — Database integration (PostgreSQL + Alembic migrations active)
+- [ ] **Phase 8** — Production hardening: rate limiting, observability (OTel), load testing
 
 ---
 
